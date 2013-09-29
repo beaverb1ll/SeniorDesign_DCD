@@ -1,5 +1,5 @@
 
-// 
+//
 // SELECT Ing0, Ing1, Ing2, Ing3, Ing4, Ing5, orderTime, pickupTime FROM orderTable WHERE expired=false"
 //
 /*
@@ -59,6 +59,7 @@ struct settings {
 int unreserveIngred(MYSQL *sql_con, MYSQL_ROW order_row);
 MYSQL* openSQL(const char *db_username, const char *db_passwd, const char *db_name);
 int cleanupDB(MYSQL *sql_connection);
+struct settings* parseArgs(int argc, char const *argv[]);
 
 int main(int argc, char const *argv[])
 {
@@ -68,7 +69,7 @@ int main(int argc, char const *argv[])
 
     openlog("DCD", LOG_PID|LOG_CONS, LOG_USER);
     syslog(LOG_INFO, "Daemon Started.\n");
-    
+
     // parse args
     currentSettings = parseArgs(argc, argv);
     syslog(LOG_INFO, "Finished parsing input arguments.");
@@ -158,9 +159,9 @@ int cleanupDB(MYSQL *sql_connection)
     time_t currentTime, orderTime;
     double timePassed;
 
-    char *baseUpdateExpired = "UPDATE orderTable SET expired='true' WHERE orderID="
-    char *fetchExpired = "SELECT orderID, Ing0, Ing1, Ing2, Ing3, Ing4, Ing5, orderTime FROM orderTable WHERE expired=false";
-    char *queryString = NULL;
+    char *baseUpdateExpired = "UPDATE orderTable SET expired='true' WHERE orderID=";
+    char *fetchExpired = "SELECT Ing0, Ing1, Ing2, Ing3, Ing4, Ing5, orderID, orderTime FROM orderTable WHERE expired='false'";
+    char queryString[300];
 
     if (mysql_query(sql_connection, fetchExpired)) {
         syslog(LOG_INFO, "Unable to query SQL to find expired orders");
@@ -187,7 +188,7 @@ int cleanupDB(MYSQL *sql_connection)
 
             // if here, the row has not yet been picked up, and is not marked expired.
             // so we need to see if drink is expired by comparing ordertime to currentTime
-
+			currentTime = time(NULL);
             orderTime = atoi(row[7]);
             syslog(LOG_INFO, "orderTime: %d", orderTime);
 
@@ -201,13 +202,13 @@ int cleanupDB(MYSQL *sql_connection)
             } else if(timePassed > MAX_SECONDS_RESERVED) // update sql to true here
             {
                 // create query string
-                strcpy(queryString, baseExpired);
-                strcat(queryString, row[0]);
+                strcpy(queryString, baseUpdateExpired);
+                strcat(queryString, row[6]);
 
                 // update sql
-                syslog(LOG_INFO, "Reservation time expired. Setting barcode %s to expired...", row[0]);
-                
-                if (mysql_query(con, queryString))
+                syslog(LOG_INFO, "Reservation time expired. Setting barcode %s to expired...", row[6]);
+
+                if (mysql_query(sql_connection, queryString))
                 {
                     syslog(LOG_INFO, "Unable to update SQL");
                 } else
@@ -216,10 +217,10 @@ int cleanupDB(MYSQL *sql_connection)
                     // update ingredient table here
                     if(unreserveIngred(sql_connection, row))
                     {
-                        syslog(LOG_INFO, "Error withdrawing reservation for barcode: %s", row[0]);
+                        syslog(LOG_INFO, "Error withdrawing reservation for barcode: %s", row[6]);
                     }
                 }
-            } else 
+            } else
             {
                 syslog(LOG_INFO, "order not expired. Skipping...");
             }
@@ -233,7 +234,7 @@ int unreserveIngred(MYSQL *sql_con, MYSQL_ROW order_row)
 {
     MYSQL_ROW row;
     MYSQL_RES *result;
-    int num_rows, i, ;
+    int num_rows, i;
     int ingredLevelArray[NUM_INGREDIENTS];
     int orderIngredArray[NUM_INGREDIENTS];
     char *ingredLevelQuery = "SELECT ingred0, ingred1, ingred2, ingred3, ingred4, ingred5 FROM ingredTable WHERE id=1";
@@ -264,7 +265,7 @@ int unreserveIngred(MYSQL *sql_con, MYSQL_ROW order_row)
     }
     row = mysql_fetch_row(result);
     // convert row ingreds to integers
-    for (i = 0; i < count; ++i)
+    for (i = 0; i < NUM_INGREDIENTS; ++i)
     {
         // convert both to ints
         ingredLevelArray[i] = atoi(row[i]);
@@ -273,10 +274,10 @@ int unreserveIngred(MYSQL *sql_con, MYSQL_ROW order_row)
         ingredLevelArray[i] += orderIngredArray[i];
     }
     // construct query string
-    sprintf(queryString, "UPDATE ingredTable SET ingred0=%d, ingred1=%d, ingred2=%d, ingred3=%d, ingred4=%d, ingred5=%d  WHERE id=1", ingredArray[0], ingredArray[1], ingredArray[2], ingredArray[3], ingredArray[4], ingredArray[5] );
+    sprintf(queryString, "UPDATE ingredTable SET ingred0=%d, ingred1=%d, ingred2=%d, ingred3=%d, ingred4=%d, ingred5=%d  WHERE id=1", ingredLevelArray[0], ingredLevelArray[1], ingredLevelArray[2], ingredLevelArray[3], ingredLevelArray[4], ingredLevelArray[5] );
 
-    // query 
-    if (mysql_query(con, queryString))
+    // query
+    if (mysql_query(sql_con, queryString))
     {
         syslog(LOG_INFO, "Error when updating Ingred values");
     }
