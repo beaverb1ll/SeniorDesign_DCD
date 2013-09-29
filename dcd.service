@@ -1,0 +1,11 @@
+[Unit]
+Description=Database Cleanup Daemon
+
+[Service]
+
+Type=forking
+EnvironmentFile=/etc/dcd.conf
+ExecStart=/usr/bin/dcd $DCD_ARGS
+
+[Install]
+WantedBy=multi-user.target
