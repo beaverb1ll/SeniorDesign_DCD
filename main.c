@@ -120,7 +120,7 @@ struct settings* parseArgs(int argc, char const *argv[])
     // strcpy(allSettings->barcodeDevice, "/dev/ttyS1");
     // allSettings->cbBaud = 17;
     // allSettings->barcodeBaud = 17;
-//  -u <username> -p <password> -d <databaseName> -c <control board tty device name> -b <barcode tty device name> -r <baudRate> -s <baudRate>
+    //  -u <username> -p <password> -d <databaseName> -c <control board tty device name> -b <barcode tty device name> -r <baudRate> -s <baudRate>
 
     while ((opt = getopt(argc, argv, "u:p:d:c:b:r:s:")) != -1)
     {
@@ -160,7 +160,7 @@ int cleanupDB(MYSQL *sql_connection)
     double timePassed;
 
     char *baseUpdateExpired = "UPDATE orderTable SET expired='true' WHERE orderID='";
-    char *fetchExpired = "SELECT Ing0, Ing1, Ing2, Ing3, Ing4, Ing5, orderID, orderTime FROM orderTable WHERE expired='false'";
+    char *fetchExpired = "SELECT Ing0, Ing1, Ing2, Ing3, Ing4, Ing5, orderID, orderTime FROM orderTable WHERE expired='false' AND pickedUP='false'";
     char queryString[300];
 
     if (mysql_query(sql_connection, fetchExpired)) {
