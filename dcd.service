@@ -1,5 +1,8 @@
 [Unit]
 Description=Database Cleanup Daemon
+Requires=mysqld.service
+After=mysqld.service
+Wants=mysqld.service
 
 [Service]
 
