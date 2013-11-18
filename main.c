@@ -62,6 +62,7 @@ int main(int argc, char const *argv[])
     // parse args
     currentSettings = parseArgs(argc, argv);
     syslog(LOG_INFO, "Finished parsing input arguments.");
+    syslog(LOG_INFO, "Timeout: %d", currentSettings->waitTimeout);
 
     // open sql
     currentSettings->con_SQL = openSQL(currentSettings->dbUsername, currentSettings->dbPasswd, currentSettings->dbName);
