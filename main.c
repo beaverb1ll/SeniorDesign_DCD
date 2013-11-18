@@ -132,7 +132,7 @@ struct settings* parseArgs(int argc, char const *argv[])
                 break;
 
             case 't': // dbName
-                allSettings->waitTimeout = optarg;
+                allSettings->waitTimeout = atoi(optarg);
                 break;
 
         case '?':
