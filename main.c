@@ -212,7 +212,8 @@ int cleanupPickedUp(MYSQL *sql_connection)
 
     if (mysql_query(sql_connection, queryString))
     {
-        syslog(LOG_INFO, "ERROR: Unable to update pickeup orders");
+        syslog(LOG_INFO, "ERROR: Unable to update pickedup orders");
+        syslog(LOG_INFO, "query: %s", queryString);
     } else
     {
         syslog(LOG_INFO, "DEBUG :: Updated pickedup orders");
