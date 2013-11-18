@@ -58,8 +58,10 @@ struct settings {
 
 int unreserveIngred(MYSQL *sql_con, MYSQL_ROW order_row);
 MYSQL* openSQL(const char *db_username, const char *db_passwd, const char *db_name);
-int cleanupDB(MYSQL *sql_connection);
+int cleanupPickedUp(MYSQL *sql_connection);
+int cleanupExpired(MYSQL *sql_connection);
 struct settings* parseArgs(int argc, char const *argv[]);
+void deleteImageWithID(char *aOrderID);
 
 int main(int argc, char const *argv[])
 {
@@ -197,7 +199,7 @@ int cleanupPickedUp(MYSQL *sql_connection)
 
         if (num_rows < 1)
         {
-            stcpy(queryString, "'");
+            strcpy(queryString, "'");
         } else
         {
             strcpy(queryString, " OR orderID='");
