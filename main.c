@@ -442,6 +442,5 @@ void sigTERM_handler(int signum)
 
 void closeConnections(void)
 {
-    mysql_close(currentSettings->con_SQL);\
-    hid_exit();
+    mysql_close(currentSettings->con_SQL);
 }
