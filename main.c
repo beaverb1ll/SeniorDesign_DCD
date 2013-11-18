@@ -68,10 +68,10 @@ void sigINT_handler(int signum);
 void sigTERM_handler(int signum);
 void closeConnections(void);
 
+struct settings *currentSettings;
+
 int main(int argc, char const *argv[])
 {
-    struct settings *currentSettings;
-
     // turn into daemon
     daemonize();
 
