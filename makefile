@@ -41,7 +41,6 @@ clean:
 install:
 	install $(EXECUTABLE) /usr/bin/$(EXECUTABLE)
 	install $(EXECUTABLE).service /usr/lib/systemd/system/$(EXECUTABLE).service
-	install $(EXECUTABLE).timer /etc/systemd/system/$(EXECUTABLE).timer
 	install $(EXECUTABLE).conf /etc/$(EXECUTABLE).conf
 	systemctl daemon-reload
 

@@ -1,9 +1,0 @@
-[Unit]
-Description=dcd timer
-
-[Timer]
-OnCalendar=*-*-* *:*:0
-Unit=dcd.service
-
-[Install]
-WantedBy=multi-user.target

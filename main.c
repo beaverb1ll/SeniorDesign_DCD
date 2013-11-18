@@ -54,31 +54,40 @@ struct settings {
     char dbName[100];
     char dbUsername[100];
     char dbPasswd[100];
+    MYSQL *con_SQL;
 };
 
 int unreserveIngred(MYSQL *sql_con, MYSQL_ROW order_row);
 MYSQL* openSQL(const char *db_username, const char *db_passwd, const char *db_name);
-int cleanupDB(MYSQL *sql_connection);
+int cleanupPickedUp(MYSQL *sql_connection);
+int cleanupExpired(MYSQL *sql_connection);
 struct settings* parseArgs(int argc, char const *argv[]);
+void deleteImageWithID(char *aOrderID);
+int daemonize(void);
+void sigINT_handler(int signum);
+void sigTERM_handler(int signum);
+void closeConnections(void);
+
+struct settings *currentSettings;
 
 int main(int argc, char const *argv[])
 {
-
-    MYSQL *con_SQL;
-    struct settings *currentSettings;
-
-    openlog("DCD", LOG_PID|LOG_CONS, LOG_USER);
-    syslog(LOG_INFO, "Daemon Started.\n");
+    // turn into daemon
+    daemonize();
 
     // parse args
     currentSettings = parseArgs(argc, argv);
     syslog(LOG_INFO, "Finished parsing input arguments.");
 
     // open sql
-    con_SQL = openSQL(currentSettings->dbUsername, currentSettings->dbPasswd, currentSettings->dbName);
+    currentSettings->con_SQL = openSQL(currentSettings->dbUsername, currentSettings->dbPasswd, currentSettings->dbName);
 
     // query and edit db.
-    return cleanupDB(con_SQL);
+    while (TRUE) {
+        cleanupExpired(currentSettings->con_SQL);
+        cleanupPickedUp(currentSettings->con_SQL);
+        sleep(5);
+    }
 }
 
 MYSQL* openSQL(const char *db_username, const char *db_passwd, const char *db_name)
@@ -150,7 +159,76 @@ struct settings* parseArgs(int argc, char const *argv[])
     return allSettings;
 }
 
-int cleanupDB(MYSQL *sql_connection)
+int cleanupPickedUp(MYSQL *sql_connection)
+{
+    int num_rows, i;
+    MYSQL_ROW row;
+    MYSQL_RES *result;
+
+    char queryString[300];
+    char *fetchPickedUp = "SELECT orderID FROM orderTable WHERE expired='false' AND pickedUp='true'";
+    char *baseUpdatePickedUp = "UPDATE orderTable SET expired='true' WHERE orderID='";
+    
+    if (mysql_query(sql_connection, fetchPickedUp)) {
+        syslog(LOG_INFO, "Unable to query SQL to find pickedUp orders");
+        return 1;
+    }
+
+    result = mysql_store_result(sql_connection);
+    if (result == NULL)
+    {
+      syslog(LOG_INFO, "Unable to get pickedUp results.");
+      return 1;
+    }
+
+    num_rows = mysql_num_rows(result);
+    if (num_rows < 1)
+    {
+      syslog(LOG_INFO, "DEBUG: No rows need updating");
+      return 1;
+    }
+
+    syslog(LOG_INFO, "DEBUG :: Num Drinks PickedUp: %d", num_rows);
+
+    strcpy(queryString, baseUpdatePickedUp);
+
+    while(row = mysql_fetch_row(result)) // row pointer in the result set
+    {
+        num_rows--;
+
+        // need to remove the image of the current orderID
+        deleteImageWithID(row[0]);
+
+        // add orderID to query string
+        strcat(queryString, row[0]);
+        syslog(LOG_INFO, "barcode: %s", row[0]);
+
+        if (num_rows < 1)
+        {
+            strcat(queryString, "'");
+        } else
+        {
+            strcat(queryString, " OR orderID='");
+        }
+        syslog(LOG_INFO, "querySting: %s", queryString);
+
+    }
+
+    if (mysql_query(sql_connection, queryString))
+    {
+        syslog(LOG_INFO, "ERROR: Unable to update pickedup orders");
+        syslog(LOG_INFO, "query: %s", queryString);
+    } else
+    {
+        syslog(LOG_INFO, "DEBUG :: Updated pickedup orders");
+    }
+
+    mysql_free_result(result);
+    syslog(LOG_INFO, "DEBUG :: Done cleaning pickedup orders");
+    return 0;
+}
+
+int cleanupExpired(MYSQL *sql_connection)
 {
     int num_rows, i;
     MYSQL_ROW row;
@@ -159,8 +237,9 @@ int cleanupDB(MYSQL *sql_connection)
     time_t currentTime, orderTime;
     double timePassed;
 
-    char *baseUpdateExpired = "UPDATE orderTable SET expired='true' WHERE orderID='";
+    char *baseUpdateExpired = "UPDATE orderTable SET expired='true', pickedUp='true' WHERE orderID='";
     char *fetchExpired = "SELECT Ing0, Ing1, Ing2, Ing3, Ing4, Ing5, orderID, orderTime FROM orderTable WHERE expired='false' AND pickedUP='false'";
+    char *fetchPickedUp = "SELECT orderID FROM orderTable WHERE expired='false' AND pickedUp='true'";
     char queryString[300];
 
     if (mysql_query(sql_connection, fetchExpired)) {
@@ -190,14 +269,14 @@ int cleanupDB(MYSQL *sql_connection)
             // so we need to see if drink is expired by comparing ordertime to currentTime
 			currentTime = time(NULL);
             orderTime = atoi(row[7]);
-            syslog(LOG_INFO, "orderTime: %d", orderTime);
+            syslog(LOG_INFO, "DEBUG :: orderTime: %d", orderTime);
 
             timePassed = difftime(currentTime, orderTime);
-            syslog(LOG_INFO, "timePassed: %lf", timePassed);
+            syslog(LOG_INFO, "DEBUG :: timePassed: %lf", timePassed);
 
             if (timePassed < 1)
             {
-                syslog(LOG_INFO, "Invalid time difference of: %lf. skipping...", timePassed);
+                syslog(LOG_INFO, "DEBUG :: Invalid time difference of: %lf. skipping...", timePassed);
                 return 1;
             } else if(timePassed > MAX_SECONDS_RESERVED) // update sql to true here
             {
@@ -207,29 +286,31 @@ int cleanupDB(MYSQL *sql_connection)
                 strcat(queryString, "'");
 
                 // update sql
-                syslog(LOG_INFO, "Reservation time expired. Setting barcode %s to expired...", row[6]);
+                syslog(LOG_INFO, "DEBUG :: Reservation time expired. Setting barcode %s to expired...", row[6]);
 
                 if (mysql_query(sql_connection, queryString))
                 {
-                    syslog(LOG_INFO, "Unable to update SQL");
+                    syslog(LOG_INFO, "ERROR: Unable to update SQL");
                 } else
                 {
-                    syslog(LOG_INFO, "Updated SQL.");
+                    syslog(LOG_INFO, "DEBUG :: Updated SQL.");
                     // update ingredient table here
                     if(unreserveIngred(sql_connection, row))
                     {
-                        syslog(LOG_INFO, "Error withdrawing reservation for barcode: %s", row[6]);
+                        syslog(LOG_INFO, "ERROR: Error withdrawing reservation for barcode: %s", row[6]);
                     }
+                    syslog(LOG_INFO, "DEBUG :: Removing barcode image: %s", row[6]);
+                    deleteImageWithID(row[6]);
                 }
             } else
             {
-                syslog(LOG_INFO, "order not expired. Skipping...");
+                syslog(LOG_INFO, "DEBUG :: order not expired. Skipping...");
             }
         }
         mysql_free_result(result);
-        syslog(LOG_INFO, "Done updating expired orders");
+        syslog(LOG_INFO, "DEBUG :: Done updating expired orders");
         return 0;
-    }
+}
 
 int unreserveIngred(MYSQL *sql_con, MYSQL_ROW order_row)
 {
@@ -284,4 +365,87 @@ int unreserveIngred(MYSQL *sql_con, MYSQL_ROW order_row)
     }
     // return without error
     return 0;
+}
+
+void deleteImageWithID(char *aOrderID) 
+{
+    char aFileName[200];
+    strcpy(aFileName, "/srv/http/barcodeImages/");
+    strcat(aFileName, aOrderID);
+    strcat(aFileName, ".png");
+
+    unlink(aFileName);
+}
+
+
+int daemonize(void) 
+{
+    /* Our process ID and Session ID */
+    pid_t pid, sid;
+    
+    /* Fork off the parent process */
+    pid = fork();
+    if (pid < 0) {
+        exit(EXIT_FAILURE);
+    }
+    /* If we got a good PID, then
+       we can exit the parent process. */
+    if (pid > 0) {
+        exit(EXIT_SUCCESS);
+    }
+
+    /* Change the file mode mask */
+    umask(0);
+            
+    /* Open any logs here */ 
+    openlog("DCD", LOG_PID|LOG_CONS, LOG_USER);
+    syslog(LOG_INFO, "Daemon Started.\n");
+            
+    /* Create a new SID for the child process */
+    sid = setsid();
+    if (sid < 0) {
+        /* Log the failure */
+        syslog(LOG_INFO, "ERROR :: Unable to create new SID. Exiting.");
+        exit(EXIT_FAILURE);
+    }
+    syslog(LOG_INFO, "finished forking");
+    
+    /* Change the current working directory */
+    if ((chdir("/")) < 0) {
+        /* Log the failure */
+        syslog(LOG_INFO, "ERROR :: Unable to change working directory. Exiting");
+        exit(EXIT_FAILURE);
+    }
+    
+    /* Close out the standard file descriptors */
+    close(STDIN_FILENO);
+    close(STDOUT_FILENO);
+    close(STDERR_FILENO);
+    
+    /* Daemon-specific initialization goes here */
+    
+    /* Register Signal Handlers*/
+    signal(SIGTERM, sigTERM_handler);
+    signal(SIGINT, sigINT_handler);
+    return 0;
+ }
+ 
+void sigINT_handler(int signum) 
+{
+    syslog (LOG_INFO, "Caught SIGINT. Exiting...");
+    closeConnections();
+    exit(0);
+
+}
+
+void sigTERM_handler(int signum) 
+{
+    syslog(LOG_INFO, "Caught SIGTERM. Exiting...");
+    closeConnections();
+    exit(0);
+}
+
+void closeConnections(void)
+{
+    mysql_close(currentSettings->con_SQL);
 }
