@@ -115,7 +115,7 @@ struct settings* parseArgs(int argc, char const *argv[])
     // allSettings->barcodeBaud = 17;
     //  -u <username> -p <password> -d <databaseName> -c <control board tty device name> -b <barcode tty device name> -r <baudRate> -s <baudRate>
 
-    while ((opt = getopt(argc, argv, "u:p:d:c:b:r:s:")) != -1)
+    while ((opt = getopt(argc, argv, "u:p:d:c:b:r:s:t:")) != -1)
     {
         switch(opt)
         {
