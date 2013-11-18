@@ -54,6 +54,7 @@ struct settings {
     char dbName[100];
     char dbUsername[100];
     char dbPasswd[100];
+    MYSQL *con_SQL;
 };
 
 int unreserveIngred(MYSQL *sql_con, MYSQL_ROW order_row);
@@ -62,27 +63,29 @@ int cleanupPickedUp(MYSQL *sql_connection);
 int cleanupExpired(MYSQL *sql_connection);
 struct settings* parseArgs(int argc, char const *argv[]);
 void deleteImageWithID(char *aOrderID);
+int daemonize(void);
+void sigINT_handler(int signum);
+void sigTERM_handler(int signum);
+void closeConnections(void);
 
 int main(int argc, char const *argv[])
 {
-
-    MYSQL *con_SQL;
     struct settings *currentSettings;
 
-    openlog("DCD", LOG_PID|LOG_CONS, LOG_USER);
-    syslog(LOG_INFO, "Daemon Started.\n");
+    // turn into daemon
+    daemonize();
 
     // parse args
     currentSettings = parseArgs(argc, argv);
     syslog(LOG_INFO, "Finished parsing input arguments.");
 
     // open sql
-    con_SQL = openSQL(currentSettings->dbUsername, currentSettings->dbPasswd, currentSettings->dbName);
+    currentSettings->con_SQL = openSQL(currentSettings->dbUsername, currentSettings->dbPasswd, currentSettings->dbName);
 
     // query and edit db.
     while (TRUE) {
-        cleanupExpired(con_SQL);
-        cleanupPickedUp(con_SQL);
+        cleanupExpired(currentSettings->con_SQL);
+        cleanupPickedUp(currentSettings->con_SQL);
         sleep(5);
     }
 }
@@ -367,4 +370,78 @@ void deleteImageWithID(char *aOrderID)
     strcpy(aFileName, ".png");
 
     unlink(aFileName);
+}
+
+
+int daemonize(void) 
+{
+    /* Our process ID and Session ID */
+    pid_t pid, sid;
+    
+    /* Fork off the parent process */
+    pid = fork();
+    if (pid < 0) {
+        exit(EXIT_FAILURE);
+    }
+    /* If we got a good PID, then
+       we can exit the parent process. */
+    if (pid > 0) {
+        exit(EXIT_SUCCESS);
+    }
+
+    /* Change the file mode mask */
+    umask(0);
+            
+    /* Open any logs here */ 
+    openlog("DCD", LOG_PID|LOG_CONS, LOG_USER);
+    syslog(LOG_INFO, "Daemon Started.\n");
+            
+    /* Create a new SID for the child process */
+    sid = setsid();
+    if (sid < 0) {
+        /* Log the failure */
+        syslog(LOG_INFO, "ERROR :: Unable to create new SID. Exiting.");
+        exit(EXIT_FAILURE);
+    }
+    syslog(LOG_INFO, "finished forking");
+    
+    /* Change the current working directory */
+    if ((chdir("/")) < 0) {
+        /* Log the failure */
+        syslog(LOG_INFO, "ERROR :: Unable to change working directory. Exiting");
+        exit(EXIT_FAILURE);
+    }
+    
+    /* Close out the standard file descriptors */
+    close(STDIN_FILENO);
+    close(STDOUT_FILENO);
+    close(STDERR_FILENO);
+    
+    /* Daemon-specific initialization goes here */
+    
+    /* Register Signal Handlers*/
+    signal(SIGTERM, sigTERM_handler);
+    signal(SIGINT, sigINT_handler);
+    return 0;
+ }
+ 
+void sigINT_handler(int signum) 
+{
+    syslog (LOG_INFO, "Caught SIGINT. Exiting...");
+    closeConnections();
+    exit(0);
+
+}
+
+void sigTERM_handler(int signum) 
+{
+    syslog(LOG_INFO, "Caught SIGTERM. Exiting...");
+    closeConnections();
+    exit(0);
+}
+
+void closeConnections(void)
+{
+    mysql_close(currentSettings->con_SQL);\
+    hid_exit();
 }
