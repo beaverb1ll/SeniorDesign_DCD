@@ -182,7 +182,7 @@ int cleanupPickedUp(MYSQL *sql_connection)
     }
 
     num_rows = mysql_num_rows(result);
-    if (num_rows < 0)
+    if (num_rows < 1)
     {
       syslog(LOG_INFO, "Error: Invalid number of rows: %d", num_rows);
       return 1;
