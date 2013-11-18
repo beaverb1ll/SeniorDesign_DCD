@@ -15,5 +15,6 @@ mysql++-devel mysql-connector-c++-devel
 -u :: database Username
 -p :: database Password
 -d :: database Name
+-t :: Sleep Timeout (in seconds)
 
 

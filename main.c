@@ -1,7 +1,3 @@
-
-//
-// SELECT Ing0, Ing1, Ing2, Ing3, Ing4, Ing5, orderTime, pickupTime FROM orderTable WHERE expired=false"
-//
 /*
 
     This program will take care of de-Allocating any drinks that have expired and have not been picked up.
@@ -10,19 +6,6 @@
     This wil do two different things.
         1) mark any expired drinks as expired.
         2) restore the ingredients from expired drinks
-
-
-// SQL Schema-> ingredTable:
-    id,
-    ingred0,
-    ingred1,
-    ingred2,
-    ingred3,
-    ingred4,
-    ingred5
-
-
-
 
 */
 
@@ -54,6 +37,7 @@ struct settings {
     char dbName[100];
     char dbUsername[100];
     char dbPasswd[100];
+    int waitTimeout;
     MYSQL *con_SQL;
 };
 
@@ -86,7 +70,7 @@ int main(int argc, char const *argv[])
     while (TRUE) {
         cleanupExpired(currentSettings->con_SQL);
         cleanupPickedUp(currentSettings->con_SQL);
-        sleep(5);
+        sleep(currentSettings->waitTimeout);
     }
 }
 
@@ -146,6 +130,11 @@ struct settings* parseArgs(int argc, char const *argv[])
             case 'd': // dbName
             strcpy(allSettings->dbName, optarg);
                 break;
+
+            case 't': // dbName
+                allSettings->waitTimeout = optarg;
+                break;
+
         case '?':
             syslog(LOG_INFO, "Invalid startup argument: %c. Exiting...", optopt);
             exit(1);
@@ -182,12 +171,17 @@ int cleanupPickedUp(MYSQL *sql_connection)
     }
 
     num_rows = mysql_num_rows(result);
-    if (num_rows < 1)
+    if (num_rows < 0)
     {
-      // syslog(LOG_INFO, "DEBUG: No rows need updating");
+      syslog(LOG_INFO, "ERROR: Problem retrieving num_rows");
       return 1;
     }
 
+    if (num_rows < 1)
+    {
+        // syslog(LOG_INFO, "DEBUG :: No pickedUp rows retreived");
+        return 1;
+    }
     // syslog(LOG_INFO, "DEBUG :: Num Drinks PickedUp: %d", num_rows);
 
     strcpy(queryString, baseUpdatePickedUp);
@@ -210,7 +204,7 @@ int cleanupPickedUp(MYSQL *sql_connection)
         {
             strcat(queryString, "' OR orderID='");
         }
-        syslog(LOG_INFO, "querySting: %s", queryString);
+        // syslog(LOG_INFO, "querySting: %s", queryString);
 
     }
 
@@ -220,11 +214,11 @@ int cleanupPickedUp(MYSQL *sql_connection)
         syslog(LOG_INFO, "query: %s", queryString);
     } else
     {
-        syslog(LOG_INFO, "DEBUG :: Updated pickedup orders");
+        // syslog(LOG_INFO, "DEBUG :: Updated pickedup orders");
     }
 
     mysql_free_result(result);
-    syslog(LOG_INFO, "DEBUG :: Done cleaning pickedup orders");
+    // syslog(LOG_INFO, "DEBUG :: Done cleaning pickedup orders");
     return 0;
 }
 
@@ -243,21 +237,21 @@ int cleanupExpired(MYSQL *sql_connection)
     char queryString[300];
 
     if (mysql_query(sql_connection, fetchExpired)) {
-        syslog(LOG_INFO, "Unable to query SQL to find expired orders");
+        syslog(LOG_INFO, "ERROR: Unable to query SQL to find expired orders");
         return 1;
     }
 
     result = mysql_store_result(sql_connection);
     if (result == NULL)
     {
-      syslog(LOG_INFO, "Unable to get expired results.");
+      syslog(LOG_INFO, "ERROR: Unable to get expired results.");
       return 1;
     }
 
     num_rows = mysql_num_rows(result);
     if (num_rows < 0)
     {
-      syslog(LOG_INFO, "Error: Invalid number of rows: %d", num_rows);
+      // syslog(LOG_INFO, "Error: Invalid number of rows: %d", num_rows);
       return 1;
     }
 
@@ -269,14 +263,14 @@ int cleanupExpired(MYSQL *sql_connection)
             // so we need to see if drink is expired by comparing ordertime to currentTime
 			currentTime = time(NULL);
             orderTime = atoi(row[7]);
-            syslog(LOG_INFO, "DEBUG :: orderTime: %d", orderTime);
+            // syslog(LOG_INFO, "DEBUG :: orderTime: %d", orderTime);
 
             timePassed = difftime(currentTime, orderTime);
-            syslog(LOG_INFO, "DEBUG :: timePassed: %lf", timePassed);
+            // syslog(LOG_INFO, "DEBUG :: timePassed: %lf", timePassed);
 
             if (timePassed < 1)
             {
-                syslog(LOG_INFO, "DEBUG :: Invalid time difference of: %lf. skipping...", timePassed);
+                // syslog(LOG_INFO, "DEBUG :: Invalid time difference of: %lf. skipping...", timePassed);
                 return 1;
             } else if(timePassed > MAX_SECONDS_RESERVED) // update sql to true here
             {
@@ -286,29 +280,29 @@ int cleanupExpired(MYSQL *sql_connection)
                 strcat(queryString, "'");
 
                 // update sql
-                syslog(LOG_INFO, "DEBUG :: Reservation time expired. Setting barcode %s to expired...", row[6]);
+                syslog(LOG_INFO, "Reservation time expired. Setting barcode %s to expired...", row[6]);
 
                 if (mysql_query(sql_connection, queryString))
                 {
                     syslog(LOG_INFO, "ERROR: Unable to update SQL");
                 } else
                 {
-                    syslog(LOG_INFO, "DEBUG :: Updated SQL.");
+                    // syslog(LOG_INFO, "DEBUG :: Updated SQL.");
                     // update ingredient table here
                     if(unreserveIngred(sql_connection, row))
                     {
                         syslog(LOG_INFO, "ERROR: Error withdrawing reservation for barcode: %s", row[6]);
                     }
-                    syslog(LOG_INFO, "DEBUG :: Removing barcode image: %s", row[6]);
+                    // syslog(LOG_INFO, "DEBUG :: Removing barcode image: %s", row[6]);
                     deleteImageWithID(row[6]);
                 }
             } else
             {
-                syslog(LOG_INFO, "DEBUG :: order not expired. Skipping...");
+                // syslog(LOG_INFO, "DEBUG :: order not expired. Skipping...");
             }
         }
         mysql_free_result(result);
-        syslog(LOG_INFO, "DEBUG :: Done updating expired orders");
+        // syslog(LOG_INFO, "DEBUG :: Done updating expired orders");
         return 0;
 }
 
@@ -324,14 +318,14 @@ int unreserveIngred(MYSQL *sql_con, MYSQL_ROW order_row)
 
     // get current amounts from sql_con_ingred
     if (mysql_query(sql_con, ingredLevelQuery)) {
-        syslog(LOG_INFO, "Unable to query SQL to find expired orders");
+        syslog(LOG_INFO, "ERROR: Unable to query SQL to find expired orders");
         return 1;
     }
 
     result = mysql_store_result(sql_con);
     if (result == NULL)
     {
-      syslog(LOG_INFO, "Unable to get expired results.");
+      syslog(LOG_INFO, "ERROR: Unable to get expired results.");
       return 1;
     }
 
