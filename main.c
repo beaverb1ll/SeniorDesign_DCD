@@ -198,14 +198,14 @@ int cleanupPickedUp(MYSQL *sql_connection)
 
         // add orderID to query string
         strcpy(queryString, baseUpdateExpired);
-        strcpy(queryString, row[0]);
+        strcat(queryString, row[0]);
 
         if (num_rows < 1)
         {
-            strcpy(queryString, "'");
+            strcat(queryString, "'");
         } else
         {
-            strcpy(queryString, " OR orderID='");
+            strcat(queryString, " OR orderID='");
         }
 
     }
@@ -367,8 +367,8 @@ void deleteImageWithID(char *aOrderID)
 {
     char aFileName[200];
     strcpy(aFileName, "/srv/http/barcodeImages/");
-    strcpy(aFileName, aOrderID);
-    strcpy(aFileName, ".png");
+    strcat(aFileName, aOrderID);
+    strcat(aFileName, ".png");
 
     unlink(aFileName);
 }
