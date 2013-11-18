@@ -237,7 +237,7 @@ int cleanupExpired(MYSQL *sql_connection)
     time_t currentTime, orderTime;
     double timePassed;
 
-    char *baseUpdateExpired = "UPDATE orderTable SET expired='true' AND pickedUp='true' WHERE orderID='";
+    char *baseUpdateExpired = "UPDATE orderTable SET expired='true', pickedUp='true' WHERE orderID='";
     char *fetchExpired = "SELECT Ing0, Ing1, Ing2, Ing3, Ing4, Ing5, orderID, orderTime FROM orderTable WHERE expired='false' AND pickedUP='false'";
     char *fetchPickedUp = "SELECT orderID FROM orderTable WHERE expired='false' AND pickedUp='true'";
     char queryString[300];
