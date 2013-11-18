@@ -167,7 +167,7 @@ int cleanupPickedUp(MYSQL *sql_connection)
 
     char queryString[300];
     char *fetchPickedUp = "SELECT orderID FROM orderTable WHERE expired='false' AND pickedUp='true'";
-    char *baseUpdateExpired = "UPDATE orderTable SET expired='true' WHERE orderID='";
+    char *baseUpdatePickedUp = "UPDATE orderTable SET expired='true' WHERE orderID='";
     
     if (mysql_query(sql_connection, fetchPickedUp)) {
         syslog(LOG_INFO, "Unable to query SQL to find pickedUp orders");
@@ -188,6 +188,9 @@ int cleanupPickedUp(MYSQL *sql_connection)
       return 1;
     }
 
+    syslog(LOG_INFO, "DEBUG :: Num Drinks PickedUp: %d", num_rows);
+
+    strcpy(queryString, baseUpdatePickedUp);
 
     while(row = mysql_fetch_row(result)) // row pointer in the result set
     {
@@ -197,8 +200,8 @@ int cleanupPickedUp(MYSQL *sql_connection)
         deleteImageWithID(row[0]);
 
         // add orderID to query string
-        strcpy(queryString, baseUpdateExpired);
         strcat(queryString, row[0]);
+        syslog(LOG_INFO, "barcode: %s", row[0]);
 
         if (num_rows < 1)
         {
@@ -207,6 +210,7 @@ int cleanupPickedUp(MYSQL *sql_connection)
         {
             strcat(queryString, " OR orderID='");
         }
+        syslog(LOG_INFO, "querySting: %s", queryString);
 
     }
 
