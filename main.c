@@ -78,7 +78,11 @@ int main(int argc, char const *argv[])
     con_SQL = openSQL(currentSettings->dbUsername, currentSettings->dbPasswd, currentSettings->dbName);
 
     // query and edit db.
-    return cleanupDB(con_SQL);
+    while (TRUE) {
+        cleanupExpired(con_SQL);
+        cleanupPickedUp(con_SQL);
+        sleep(5);
+    }
 }
 
 MYSQL* openSQL(const char *db_username, const char *db_passwd, const char *db_name)
@@ -150,7 +154,71 @@ struct settings* parseArgs(int argc, char const *argv[])
     return allSettings;
 }
 
-int cleanupDB(MYSQL *sql_connection)
+int cleanupPickedUp(MYSQL *sql_connection)
+{
+    int num_rows, i;
+    MYSQL_ROW row;
+    MYSQL_RES *result;
+
+    char queryString[300];
+    char *fetchPickedUp = "SELECT orderID FROM orderTable WHERE expired='false' AND pickedUp='true'";
+    char *baseUpdateExpired = "UPDATE orderTable SET expired='true' WHERE orderID='";
+    
+    if (mysql_query(sql_connection, fetchPickedUp)) {
+        syslog(LOG_INFO, "Unable to query SQL to find pickedUp orders");
+        return 1;
+    }
+
+    result = mysql_store_result(sql_connection);
+    if (result == NULL)
+    {
+      syslog(LOG_INFO, "Unable to get pickedUp results.");
+      return 1;
+    }
+
+    num_rows = mysql_num_rows(result);
+    if (num_rows < 0)
+    {
+      syslog(LOG_INFO, "Error: Invalid number of rows: %d", num_rows);
+      return 1;
+    }
+
+
+    while(row = mysql_fetch_row(result)) // row pointer in the result set
+    {
+        num_rows--;
+
+        // need to remove the image of the current orderID
+        deleteImageWithID(row[0]);
+
+        // add orderID to query string
+        strcpy(queryString, baseUpdateExpired);
+        strcpy(queryString, row[0]);
+
+        if (num_rows < 1)
+        {
+            stcpy(queryString, "'");
+        } else
+        {
+            strcpy(queryString, " OR orderID='");
+        }
+
+    }
+
+    if (mysql_query(sql_connection, queryString))
+    {
+        syslog(LOG_INFO, "ERROR: Unable to update pickeup orders");
+    } else
+    {
+        syslog(LOG_INFO, "DEBUG :: Updated pickedup orders");
+    }
+
+    mysql_free_result(result);
+    syslog(LOG_INFO, "DEBUG :: Done cleaning pickedup orders");
+    return 0;
+}
+
+int cleanupExpired(MYSQL *sql_connection)
 {
     int num_rows, i;
     MYSQL_ROW row;
@@ -159,8 +227,9 @@ int cleanupDB(MYSQL *sql_connection)
     time_t currentTime, orderTime;
     double timePassed;
 
-    char *baseUpdateExpired = "UPDATE orderTable SET expired='true' WHERE orderID='";
+    char *baseUpdateExpired = "UPDATE orderTable SET expired='true' AND pickedUp='true' WHERE orderID='";
     char *fetchExpired = "SELECT Ing0, Ing1, Ing2, Ing3, Ing4, Ing5, orderID, orderTime FROM orderTable WHERE expired='false' AND pickedUP='false'";
+    char *fetchPickedUp = "SELECT orderID FROM orderTable WHERE expired='false' AND pickedUp='true'";
     char queryString[300];
 
     if (mysql_query(sql_connection, fetchExpired)) {
@@ -190,14 +259,14 @@ int cleanupDB(MYSQL *sql_connection)
             // so we need to see if drink is expired by comparing ordertime to currentTime
 			currentTime = time(NULL);
             orderTime = atoi(row[7]);
-            syslog(LOG_INFO, "orderTime: %d", orderTime);
+            syslog(LOG_INFO, "DEBUG :: orderTime: %d", orderTime);
 
             timePassed = difftime(currentTime, orderTime);
-            syslog(LOG_INFO, "timePassed: %lf", timePassed);
+            syslog(LOG_INFO, "DEBUG :: timePassed: %lf", timePassed);
 
             if (timePassed < 1)
             {
-                syslog(LOG_INFO, "Invalid time difference of: %lf. skipping...", timePassed);
+                syslog(LOG_INFO, "DEBUG :: Invalid time difference of: %lf. skipping...", timePassed);
                 return 1;
             } else if(timePassed > MAX_SECONDS_RESERVED) // update sql to true here
             {
@@ -207,29 +276,31 @@ int cleanupDB(MYSQL *sql_connection)
                 strcat(queryString, "'");
 
                 // update sql
-                syslog(LOG_INFO, "Reservation time expired. Setting barcode %s to expired...", row[6]);
+                syslog(LOG_INFO, "DEBUG :: Reservation time expired. Setting barcode %s to expired...", row[6]);
 
                 if (mysql_query(sql_connection, queryString))
                 {
-                    syslog(LOG_INFO, "Unable to update SQL");
+                    syslog(LOG_INFO, "ERROR: Unable to update SQL");
                 } else
                 {
-                    syslog(LOG_INFO, "Updated SQL.");
+                    syslog(LOG_INFO, "DEBUG :: Updated SQL.");
                     // update ingredient table here
                     if(unreserveIngred(sql_connection, row))
                     {
-                        syslog(LOG_INFO, "Error withdrawing reservation for barcode: %s", row[6]);
+                        syslog(LOG_INFO, "ERROR: Error withdrawing reservation for barcode: %s", row[6]);
                     }
+                    syslog(LOG_INFO, "DEBUG :: Removing barcode image: %s", row[6]);
+                    deleteImageWithID(row[6]);
                 }
             } else
             {
-                syslog(LOG_INFO, "order not expired. Skipping...");
+                syslog(LOG_INFO, "DEBUG :: order not expired. Skipping...");
             }
         }
         mysql_free_result(result);
-        syslog(LOG_INFO, "Done updating expired orders");
+        syslog(LOG_INFO, "DEBUG :: Done updating expired orders");
         return 0;
-    }
+}
 
 int unreserveIngred(MYSQL *sql_con, MYSQL_ROW order_row)
 {
@@ -284,4 +355,14 @@ int unreserveIngred(MYSQL *sql_con, MYSQL_ROW order_row)
     }
     // return without error
     return 0;
+}
+
+void deleteImageWithID(char *aOrderID) 
+{
+    char aFileName[200];
+    strcpy(aFileName, "/srv/http/barcodeImages/");
+    strcpy(aFileName, aOrderID);
+    strcpy(aFileName, ".png");
+
+    unlink(aFileName);
 }
