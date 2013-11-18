@@ -184,11 +184,11 @@ int cleanupPickedUp(MYSQL *sql_connection)
     num_rows = mysql_num_rows(result);
     if (num_rows < 1)
     {
-      syslog(LOG_INFO, "DEBUG: No rows need updating");
+      // syslog(LOG_INFO, "DEBUG: No rows need updating");
       return 1;
     }
 
-    syslog(LOG_INFO, "DEBUG :: Num Drinks PickedUp: %d", num_rows);
+    // syslog(LOG_INFO, "DEBUG :: Num Drinks PickedUp: %d", num_rows);
 
     strcpy(queryString, baseUpdatePickedUp);
 
@@ -201,14 +201,14 @@ int cleanupPickedUp(MYSQL *sql_connection)
 
         // add orderID to query string
         strcat(queryString, row[0]);
-        syslog(LOG_INFO, "barcode: %s", row[0]);
+        // syslog(LOG_INFO, "barcode: %s", row[0]);
 
         if (num_rows < 1)
         {
             strcat(queryString, "'");
         } else
         {
-            strcat(queryString, " OR orderID='");
+            strcat(queryString, "' OR orderID='");
         }
         syslog(LOG_INFO, "querySting: %s", queryString);
 
