@@ -312,8 +312,8 @@ int unreserveIngred(MYSQL *sql_con, MYSQL_ROW order_row)
     MYSQL_ROW row;
     MYSQL_RES *result;
     int num_rows, i;
-    int ingredLevelArray[NUM_INGREDIENTS];
-    int orderIngredArray[NUM_INGREDIENTS];
+    float ingredLevelArray[NUM_INGREDIENTS];
+    float orderIngredArray[NUM_INGREDIENTS];
     char *ingredLevelQuery = "SELECT ing0, ing1, ing2, ing3, ing4, ing5 FROM orderTable WHERE orderID=\"0\"";
     char queryString[300];
 
@@ -345,13 +345,13 @@ int unreserveIngred(MYSQL *sql_con, MYSQL_ROW order_row)
     for (i = 0; i < NUM_INGREDIENTS; ++i)
     {
         // convert both to ints
-        ingredLevelArray[i] = atoi(row[i]);
-        orderIngredArray[i] = atoi(order_row[i]);
+        ingredLevelArray[i] = atof(row[i]);
+        orderIngredArray[i] = atof(order_row[i]);
         // perform math to update
         ingredLevelArray[i] += orderIngredArray[i];
     }
     // construct query string
-    sprintf(queryString, "UPDATE orderTable SET ing0=%d, ing1=%d, ing2=%d, ing3=%d, ing4=%d, ing5=%d  WHERE orderID=\"0\"", ingredLevelArray[0], ingredLevelArray[1], ingredLevelArray[2], ingredLevelArray[3], ingredLevelArray[4], ingredLevelArray[5] );
+    sprintf(queryString, "UPDATE orderTable SET ing0=%f, ing1=%f, ing2=%f, ing3=%f, ing4=%f, ing5=%f  WHERE orderID=\"0\"", ingredLevelArray[0], ingredLevelArray[1], ingredLevelArray[2], ingredLevelArray[3], ingredLevelArray[4], ingredLevelArray[5] );
 
     // query
     if (mysql_query(sql_con, queryString))
